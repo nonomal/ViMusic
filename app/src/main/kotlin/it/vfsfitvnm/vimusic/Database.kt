@@ -38,10 +38,11 @@ import it.vfsfitvnm.vimusic.enums.SongSortBy
 import it.vfsfitvnm.vimusic.enums.SortOrder
 import it.vfsfitvnm.vimusic.models.Album
 import it.vfsfitvnm.vimusic.models.Artist
-import it.vfsfitvnm.vimusic.models.DetailedSong
-import it.vfsfitvnm.vimusic.models.DetailedSongWithContentLength
+import it.vfsfitvnm.vimusic.models.SongWithContentLength
 import it.vfsfitvnm.vimusic.models.Event
 import it.vfsfitvnm.vimusic.models.Format
+import it.vfsfitvnm.vimusic.models.Info
+import it.vfsfitvnm.vimusic.models.Lyrics
 import it.vfsfitvnm.vimusic.models.Playlist
 import it.vfsfitvnm.vimusic.models.PlaylistPreview
 import it.vfsfitvnm.vimusic.models.PlaylistWithSongs
@@ -62,34 +63,34 @@ interface Database {
     @Transaction
     @Query("SELECT * FROM Song WHERE totalPlayTimeMs > 0 ORDER BY ROWID ASC")
     @RewriteQueriesToDropUnusedColumns
-    fun songsByRowIdAsc(): Flow<List<DetailedSong>>
+    fun songsByRowIdAsc(): Flow<List<Song>>
 
     @Transaction
     @Query("SELECT * FROM Song WHERE totalPlayTimeMs > 0 ORDER BY ROWID DESC")
     @RewriteQueriesToDropUnusedColumns
-    fun songsByRowIdDesc(): Flow<List<DetailedSong>>
+    fun songsByRowIdDesc(): Flow<List<Song>>
 
     @Transaction
     @Query("SELECT * FROM Song WHERE totalPlayTimeMs > 0 ORDER BY title ASC")
     @RewriteQueriesToDropUnusedColumns
-    fun songsByTitleAsc(): Flow<List<DetailedSong>>
+    fun songsByTitleAsc(): Flow<List<Song>>
 
     @Transaction
     @Query("SELECT * FROM Song WHERE totalPlayTimeMs > 0 ORDER BY title DESC")
     @RewriteQueriesToDropUnusedColumns
-    fun songsByTitleDesc(): Flow<List<DetailedSong>>
+    fun songsByTitleDesc(): Flow<List<Song>>
 
     @Transaction
     @Query("SELECT * FROM Song WHERE totalPlayTimeMs > 0 ORDER BY totalPlayTimeMs ASC")
     @RewriteQueriesToDropUnusedColumns
-    fun songsByPlayTimeAsc(): Flow<List<DetailedSong>>
+    fun songsByPlayTimeAsc(): Flow<List<Song>>
 
     @Transaction
     @Query("SELECT * FROM Song WHERE totalPlayTimeMs > 0 ORDER BY totalPlayTimeMs DESC")
     @RewriteQueriesToDropUnusedColumns
-    fun songsByPlayTimeDesc(): Flow<List<DetailedSong>>
+    fun songsByPlayTimeDesc(): Flow<List<Song>>
 
-    fun songs(sortBy: SongSortBy, sortOrder: SortOrder): Flow<List<DetailedSong>> {
+    fun songs(sortBy: SongSortBy, sortOrder: SortOrder): Flow<List<Song>> {
         return when (sortBy) {
             SongSortBy.PlayTime -> when (sortOrder) {
                 SortOrder.Ascending -> songsByPlayTimeAsc()
@@ -109,7 +110,7 @@ interface Database {
     @Transaction
     @Query("SELECT * FROM Song WHERE likedAt IS NOT NULL ORDER BY likedAt DESC")
     @RewriteQueriesToDropUnusedColumns
-    fun favorites(): Flow<List<DetailedSong>>
+    fun favorites(): Flow<List<Song>>
 
     @Query("SELECT * FROM QueuedMediaItem")
     fun queue(): List<QueuedMediaItem>
@@ -138,17 +139,8 @@ interface Database {
     @Query("UPDATE Song SET durationText = :durationText WHERE id = :songId")
     fun updateDurationText(songId: String, durationText: String): Int
 
-    @Query("SELECT lyrics FROM Song WHERE id = :songId")
-    fun lyrics(songId: String): Flow<String?>
-
-    @Query("SELECT synchronizedLyrics FROM Song WHERE id = :songId")
-    fun synchronizedLyrics(songId: String): Flow<String?>
-
-    @Query("UPDATE Song SET lyrics = :lyrics WHERE id = :songId")
-    fun updateLyrics(songId: String, lyrics: String?): Int
-
-    @Query("UPDATE Song SET synchronizedLyrics = :lyrics WHERE id = :songId")
-    fun updateSynchronizedLyrics(songId: String, lyrics: String?): Int
+    @Query("SELECT * FROM Lyrics WHERE songId = :songId")
+    fun lyrics(songId: String): Flow<Lyrics?>
 
     @Query("SELECT * FROM Artist WHERE id = :id")
     fun artist(id: String): Flow<Artist?>
@@ -187,7 +179,7 @@ interface Database {
     @Transaction
     @Query("SELECT * FROM Song JOIN SongAlbumMap ON Song.id = SongAlbumMap.songId WHERE SongAlbumMap.albumId = :albumId AND position IS NOT NULL ORDER BY position")
     @RewriteQueriesToDropUnusedColumns
-    fun albumSongs(albumId: String): Flow<List<DetailedSong>>
+    fun albumSongs(albumId: String): Flow<List<Song>>
 
     @Query("SELECT * FROM Album WHERE bookmarkedAt IS NOT NULL ORDER BY title ASC")
     fun albumsByTitleAsc(): Flow<List<Album>>
@@ -281,15 +273,14 @@ interface Database {
     @Transaction
     @Query("SELECT * FROM Song JOIN SongArtistMap ON Song.id = SongArtistMap.songId WHERE SongArtistMap.artistId = :artistId AND totalPlayTimeMs > 0 ORDER BY Song.ROWID DESC")
     @RewriteQueriesToDropUnusedColumns
-    fun artistSongs(artistId: String): Flow<List<DetailedSong>>
+    fun artistSongs(artistId: String): Flow<List<Song>>
 
     @Query("SELECT * FROM Format WHERE songId = :songId")
     fun format(songId: String): Flow<Format?>
 
     @Transaction
-    @Query("SELECT * FROM Song JOIN Format ON id = songId WHERE contentLength IS NOT NULL AND totalPlayTimeMs > 0 ORDER BY Song.ROWID DESC")
-    @RewriteQueriesToDropUnusedColumns
-    fun songsWithContentLength(): Flow<List<DetailedSongWithContentLength>>
+    @Query("SELECT Song.*, contentLength FROM Song JOIN Format ON id = songId WHERE contentLength IS NOT NULL AND totalPlayTimeMs > 0 ORDER BY Song.ROWID DESC")
+    fun songsWithContentLength(): Flow<List<SongWithContentLength>>
 
     @Query("""
         UPDATE SongPlaylistMap SET position = 
@@ -312,12 +303,18 @@ interface Database {
     fun loudnessDb(songId: String): Flow<Float?>
 
     @Query("SELECT * FROM Song WHERE title LIKE :query OR artistsText LIKE :query")
-    fun search(query: String): Flow<List<DetailedSong>>
+    fun search(query: String): Flow<List<Song>>
+
+    @Query("SELECT albumId AS id, NULL AS name FROM SongAlbumMap WHERE songId = :songId")
+    fun songAlbumInfo(songId: String): Info
+
+    @Query("SELECT id, name FROM Artist LEFT JOIN SongArtistMap ON id = artistId WHERE songId = :songId")
+    fun songArtistInfo(songId: String): List<Info>
 
     @Transaction
     @Query("SELECT Song.* FROM Event JOIN Song ON Song.id = songId GROUP BY songId ORDER BY SUM(CAST(playTime AS REAL) / (((:now - timestamp) / 86400000) + 1)) DESC LIMIT 1")
     @RewriteQueriesToDropUnusedColumns
-    fun trending(now: Long = System.currentTimeMillis()): Flow<DetailedSong?>
+    fun trending(now: Long = System.currentTimeMillis()): Flow<Song?>
 
     @Query("SELECT COUNT (*) FROM Event")
     fun eventsCount(): Flow<Int>
@@ -407,6 +404,9 @@ interface Database {
     fun update(playlist: Playlist)
 
     @Upsert
+    fun upsert(lyrics: Lyrics)
+
+    @Upsert
     fun upsert(album: Album, songAlbumMaps: List<SongAlbumMap>)
 
     @Upsert
@@ -445,11 +445,12 @@ interface Database {
         QueuedMediaItem::class,
         Format::class,
         Event::class,
+        Lyrics::class,
     ],
     views = [
         SortedSongPlaylistMap::class
     ],
-    version = 22,
+    version = 23,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
@@ -487,7 +488,8 @@ abstract class DatabaseInitializer protected constructor() : RoomDatabase() {
                     .addMigrations(
                         From8To9Migration(),
                         From10To11Migration(),
-                        From14To15Migration()
+                        From14To15Migration(),
+                        From22To23Migration()
                     )
                     .build()
             }
@@ -614,6 +616,27 @@ abstract class DatabaseInitializer protected constructor() : RoomDatabase() {
 
     @DeleteColumn.Entries(DeleteColumn("Artist", "info"))
     class From21To22Migration : AutoMigrationSpec
+
+    class From22To23Migration : Migration(22, 23) {
+        override fun migrate(it: SupportSQLiteDatabase) {
+            it.execSQL("CREATE TABLE IF NOT EXISTS Lyrics (`songId` TEXT NOT NULL, `fixed` TEXT, `synced` TEXT, PRIMARY KEY(`songId`), FOREIGN KEY(`songId`) REFERENCES `Song`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE)")
+
+            it.query(SimpleSQLiteQuery("SELECT id, lyrics, synchronizedLyrics FROM Song;")).use { cursor ->
+                val lyricsValues = ContentValues(3)
+                while (cursor.moveToNext()) {
+                    lyricsValues.put("songId", cursor.getString(0))
+                    lyricsValues.put("fixed", cursor.getString(1))
+                    lyricsValues.put("synced", cursor.getString(2))
+                    it.insert("Lyrics", CONFLICT_IGNORE, lyricsValues)
+                }
+            }
+
+            it.execSQL("CREATE TABLE IF NOT EXISTS Song_new (`id` TEXT NOT NULL, `title` TEXT NOT NULL, `artistsText` TEXT, `durationText` TEXT, `thumbnailUrl` TEXT, `likedAt` INTEGER, `totalPlayTimeMs` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+            it.execSQL("INSERT INTO Song_new(id, title, artistsText, durationText, thumbnailUrl, likedAt, totalPlayTimeMs) SELECT id, title, artistsText, durationText, thumbnailUrl, likedAt, totalPlayTimeMs FROM Song;")
+            it.execSQL("DROP TABLE Song;")
+            it.execSQL("ALTER TABLE Song_new RENAME TO Song;")
+        }
+    }
 }
 
 @TypeConverters

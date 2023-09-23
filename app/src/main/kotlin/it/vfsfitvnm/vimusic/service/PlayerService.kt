@@ -104,7 +104,6 @@ import it.vfsfitvnm.vimusic.utils.resumePlaybackWhenDeviceConnectedKey
 import it.vfsfitvnm.vimusic.utils.shouldBePlaying
 import it.vfsfitvnm.vimusic.utils.skipSilenceKey
 import it.vfsfitvnm.vimusic.utils.timer
-import it.vfsfitvnm.vimusic.utils.toast
 import it.vfsfitvnm.vimusic.utils.trackLoopEnabledKey
 import it.vfsfitvnm.vimusic.utils.volumeNormalizationKey
 import kotlin.math.roundToInt
@@ -130,10 +129,13 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
         .setActions(
             PlaybackState.ACTION_PLAY
                     or PlaybackState.ACTION_PAUSE
+                    or PlaybackState.ACTION_PLAY_PAUSE
+                    or PlaybackState.ACTION_STOP
                     or PlaybackState.ACTION_SKIP_TO_PREVIOUS
                     or PlaybackState.ACTION_SKIP_TO_NEXT
-                    or PlaybackState.ACTION_PLAY_PAUSE
+                    or PlaybackState.ACTION_SKIP_TO_QUEUE_ITEM
                     or PlaybackState.ACTION_SEEK_TO
+                    or PlaybackState.ACTION_REWIND
         )
 
     private val metadataBuilder = MediaMetadata.Builder()
@@ -382,7 +384,7 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
                         .setSubtitle(mediaItem.mediaMetadata.artist)
                         .setIconUri(mediaItem.mediaMetadata.artworkUri)
                         .build(),
-                    index.toLong()
+                    (index + startIndex).toLong()
                 )
             }
         )
@@ -478,9 +480,7 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
                     try {
                         loudnessEnhancer?.setTargetGain(-((loudnessDb ?: 0f) * 100).toInt() + 500)
                         loudnessEnhancer?.enabled = true
-                    } catch (_: Exception) {
-                        toast("Couldn't normalize volume!")
-                    }
+                    } catch (_: Exception) { }
                 }
             }
         }
@@ -954,9 +954,12 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
     private class SessionCallback(private val player: Player) : MediaSession.Callback() {
         override fun onPlay() = player.play()
         override fun onPause() = player.pause()
-        override fun onSkipToPrevious() = player.forceSeekToPrevious()
-        override fun onSkipToNext() = player.forceSeekToNext()
+        override fun onSkipToPrevious() = runCatching(player::forceSeekToPrevious).let { }
+        override fun onSkipToNext() = runCatching(player::forceSeekToNext).let { }
         override fun onSeekTo(pos: Long) = player.seekTo(pos)
+        override fun onStop() = player.pause()
+        override fun onRewind() = player.seekToDefaultPosition()
+        override fun onSkipToQueueItem(id: Long) = runCatching { player.seekToDefaultPosition(id.toInt()) }.let { }
     }
 
     private class NotificationActionReceiver(private val player: Player) : BroadcastReceiver() {

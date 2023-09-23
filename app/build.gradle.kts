@@ -11,8 +11,8 @@ android {
         applicationId = "it.vfsfitvnm.vimusic"
         minSdk = 21
         targetSdk = 33
-        versionCode = 19
-        versionName = "0.5.3"
+        versionCode = 20
+        versionName = "0.5.4"
     }
 
     splits {
@@ -88,7 +88,6 @@ dependencies {
 
     implementation(libs.room)
     kapt(libs.room.compiler)
-    annotationProcessor(libs.room.compiler)
 
     implementation(projects.innertube)
     implementation(projects.kugou)
